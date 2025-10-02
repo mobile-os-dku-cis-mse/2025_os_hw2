@@ -1,0 +1,11 @@
+/build/
+/CMakeFiles/
+/cmake-build-debug
+.idea
+/CMakeCache.txt
+/Makefile
+/*.o
+/*.a
+/*.so
+/*.exe
+sish
