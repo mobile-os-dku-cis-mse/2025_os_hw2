@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include "char_stat.h"
+#include "performance.h"
 
 typedef struct sharedobject {
     FILE *rfile;
@@ -77,8 +78,9 @@ void *consumer(void *arg) {
     int i = 0;
     int len;
     char *line;
+    int linenum;
 
-    CharStats* stats = malloc(sizeof(CharStats));
+    CharStats *stats = malloc(sizeof(CharStats));
     init_stats(stats);
 
     while (1) {
@@ -96,6 +98,7 @@ void *consumer(void *arg) {
         }
 
         line = so->line;
+        linenum = so->linenum;
         so->line = NULL;
         so->full = 0;
 
@@ -104,7 +107,7 @@ void *consumer(void *arg) {
 
         len = strlen(line);
         printf("Cons_%x: [%02d:%02d] %s",
-               (unsigned int) pthread_self(), i, so->linenum, line);
+               (unsigned int) pthread_self(), i, linenum, line);
         update_stats_in_line(line, stats);
         free(line);
         i++;
@@ -124,9 +127,11 @@ int main(int argc, char *argv[]) {
     int rc;
     long t;
     RetFromThread *ret;
-    int* ret_producer;
+    int *ret_producer;
     int i;
     FILE *rfile;
+    MetricsTimer timer;
+
     if (argc == 1) {
         printf("usage: ./prod_cons <readfile> #Producer #Consumer\n");
         exit(0);
@@ -157,13 +162,17 @@ int main(int argc, char *argv[]) {
     pthread_mutex_init(&share->lock, NULL);
     pthread_cond_init(&share->cond_not_full, NULL);
     pthread_cond_init(&share->cond_not_empty, NULL);
+
+    start_timer(&timer);
+
     for (i = 0; i < Nprod; i++)
         pthread_create(&prod[i], NULL, producer, share);
     for (i = 0; i < Ncons; i++)
         pthread_create(&cons[i], NULL, consumer, share);
     printf("main continuing\n");
 
-    int sum_c, sum_p = 0;
+    int sum_c = 0;
+    int sum_p = 0;
     for (i = 0; i < Ncons; i++) {
         rc = pthread_join(cons[i], (void **) &ret);
         printf("main: consumer_%d joined with %d\n", i, ret->i);
@@ -180,9 +189,12 @@ int main(int argc, char *argv[]) {
         sum_p += *ret_producer;
     }
 
+    stop_timer(&timer);
+
     printf("main continuing\n");
     print_stats(&stats_main);
     printf("sum_c: %d \nsum_p: %d", sum_c, sum_p);
+    print_metrics(&timer, Ncons, Nprod);
 
     pthread_exit(NULL);
     exit(0);
