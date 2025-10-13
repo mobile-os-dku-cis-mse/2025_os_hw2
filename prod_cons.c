@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include "char_stat.h"
 
 typedef struct sharedobject {
     FILE *rfile;
@@ -17,6 +18,11 @@ typedef struct sharedobject {
     int eof;
 } so_t;
 
+typedef struct ret_from_thread {
+    int i;
+    CharStats *stats;
+} RetFromThread;
+
 void *producer(void *arg) {
     so_t *so = arg;
     int *ret = malloc(sizeof(int));
@@ -27,14 +33,18 @@ void *producer(void *arg) {
     ssize_t read = 0;
 
     while (1) {
-        read = getdelim(&line, &len, '\n', rfile);
-
         pthread_mutex_lock(&so->lock);
+
+        while (so->full && !so->eof) {
+            pthread_cond_wait(&so->cond_not_full, &so->lock);
+        }
 
         if (so->eof) {
             pthread_mutex_unlock(&so->lock);
             break;
         }
+
+        read = getdelim(&line, &len, '\n', rfile);
 
         if (read == -1) {
             so->eof = 1;
@@ -42,15 +52,6 @@ void *producer(void *arg) {
 
             pthread_cond_broadcast(&so->cond_not_empty);
             pthread_cond_broadcast(&so->cond_not_full);
-            pthread_mutex_unlock(&so->lock);
-            break;
-        }
-
-        while (so->full && !so->eof) {
-            pthread_cond_wait(&so->cond_not_full, &so->lock);
-        }
-
-        if (so->eof) {
             pthread_mutex_unlock(&so->lock);
             break;
         }
@@ -72,10 +73,13 @@ void *producer(void *arg) {
 
 void *consumer(void *arg) {
     so_t *so = arg;
-    int *ret = malloc(sizeof(int));
+    RetFromThread *ret = malloc(sizeof(RetFromThread));
     int i = 0;
     int len;
     char *line;
+
+    CharStats* stats = malloc(sizeof(CharStats));
+    init_stats(stats);
 
     while (1) {
         pthread_mutex_lock(&so->lock);
@@ -101,14 +105,17 @@ void *consumer(void *arg) {
         len = strlen(line);
         printf("Cons_%x: [%02d:%02d] %s",
                (unsigned int) pthread_self(), i, so->linenum, line);
+        update_stats_in_line(line, stats);
         free(line);
         i++;
     }
     printf("Cons: %d lines\n", i);
-    *ret = i;
+
+    ret->i = i;
+    ret->stats = stats;
+
     pthread_exit(ret);
 }
-
 
 int main(int argc, char *argv[]) {
     pthread_t prod[100];
@@ -116,7 +123,8 @@ int main(int argc, char *argv[]) {
     int Nprod, Ncons;
     int rc;
     long t;
-    int *ret;
+    RetFromThread *ret;
+    int* ret_producer;
     int i;
     FILE *rfile;
     if (argc == 1) {
@@ -141,6 +149,9 @@ int main(int argc, char *argv[]) {
         if (Ncons == 0) Ncons = 1;
     } else Ncons = 1;
 
+    CharStats stats_main;
+    init_stats(&stats_main);
+
     share->rfile = rfile;
     share->line = NULL;
     pthread_mutex_init(&share->lock, NULL);
@@ -152,14 +163,27 @@ int main(int argc, char *argv[]) {
         pthread_create(&cons[i], NULL, consumer, share);
     printf("main continuing\n");
 
+    int sum_c, sum_p = 0;
     for (i = 0; i < Ncons; i++) {
         rc = pthread_join(cons[i], (void **) &ret);
-        printf("main: consumer_%d joined with %d\n", i, *ret);
+        printf("main: consumer_%d joined with %d\n", i, ret->i);
+        sum_c += ret->i;
+
+        accumulate_stats(&stats_main, ret->stats);
+
+        free(ret->stats);
+        free(ret);
     }
     for (i = 0; i < Nprod; i++) {
-        rc = pthread_join(prod[i], (void **) &ret);
-        printf("main: producer_%d joined with %d\n", i, *ret);
+        rc = pthread_join(prod[i], (void **) &ret_producer);
+        printf("main: producer_%d joined with %d\n", i, *ret_producer);
+        sum_p += *ret_producer;
     }
+
+    printf("main continuing\n");
+    print_stats(&stats_main);
+    printf("sum_c: %d \nsum_p: %d", sum_c, sum_p);
+
     pthread_exit(NULL);
     exit(0);
 }
