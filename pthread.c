@@ -6,11 +6,16 @@
 #include <unistd.h>
 #include <ctype.h>
 
+// pthread_mutes_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+
 struct thread_info {
 	pthread_t 	thread_id;
 	int			thread_num;
 	char *		argv_string;
 };
+
+// int global_ind = 0;
 
 static void * thread_fn(void *arg)
 {
@@ -28,6 +33,11 @@ static void * thread_fn(void *arg)
 	for (p = uargv; *p != '\0'; p++)
 		*p = toupper(*p);
 
+//	for(int i = 0; i < 0x100000000; i++){
+//		ptread_mutex_lock(&lock);
+//		global_ind++;
+//		pthread_mutex_unlock(&lock);
+//	}
 	return uargv;
 }
 
@@ -105,6 +115,7 @@ int main(int argc, char * argv[])
 			   tinfo[tnum].thread_num, (char *) res);
 	   free(res);      /* Free memory allocated by thread */
    }
+   //printf("global_ind: %ls\n", global_ind);
 
    free(tinfo);
    exit(EXIT_SUCCESS);

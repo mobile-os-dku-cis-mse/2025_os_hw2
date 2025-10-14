@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
 	int rc = 0;
 	int sum = 0;
 	int line_num = 1;
-	char *line = NULL;
+	char *line = NULL; 
 	size_t length = 0;
 	FILE *rfile = NULL;
 
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
 	// initialize stat
 	memset(stat, 0, sizeof(stat));
-	memset(stat2, 0, sizeof(stat));
+	memset(stat2, 0, sizeof(stat2));
 
 	while (1) {
 		char *cptr = NULL;
