@@ -9,7 +9,6 @@ typedef struct sharedobject {
 	FILE *rfile;
 	int linenum;
 	char *line;
-	pthread_mutex_t lock;
 	sem_t empty; // Semaphore to indicate buffer is empty
 	sem_t full;  // Semaphore to indicate buffer is full
 } so_t;
@@ -27,17 +26,13 @@ void *producer(void *arg) {
 		read = getdelim(&line, &len, '\n', rfile);
 		if (read == -1) {
 			sem_wait(&so->empty);
-			pthread_mutex_lock(&so->lock);
 			so->line = NULL;
-			pthread_mutex_unlock(&so->lock);
 			sem_post(&so->full);
 			break;
 		}
 		sem_wait(&so->empty);
-		pthread_mutex_lock(&so->lock);
 		so->linenum = i;
 		so->line = strdup(line);
-		pthread_mutex_unlock(&so->lock);
 		sem_post(&so->full);
 		i++;
 	}
@@ -55,17 +50,14 @@ void *consumer(void *arg) {
 
 	while (1) {
 		sem_wait(&so->full);
-		pthread_mutex_lock(&so->lock);
 		line = so->line;
 		if (line == NULL) {
-			pthread_mutex_unlock(&so->lock);
 			sem_post(&so->empty);
 			break;
 		}
 		printf("Cons_%x: [%02d:%02d] %s",
 			(unsigned int)pthread_self(), i, so->linenum, line);
 		free(so->line);
-		pthread_mutex_unlock(&so->lock);
 		sem_post(&so->empty);
 		i++;
 	}
@@ -110,7 +102,6 @@ int main (int argc, char *argv[]) {
 
 	share->rfile = rfile;
 	share->line = NULL;
-	pthread_mutex_init(&share->lock, NULL);
 	sem_init(&share->empty, 0, 1); // Initially, buffer is empty
 	sem_init(&share->full, 0, 0);  // Initially, buffer is not full
 
@@ -132,7 +123,6 @@ int main (int argc, char *argv[]) {
 	}
 	sem_destroy(&share->empty);
 	sem_destroy(&share->full);
-	pthread_mutex_destroy(&share->lock);
 	fclose(rfile);
 	free(share);
 	pthread_exit(NULL);

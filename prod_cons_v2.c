@@ -61,7 +61,7 @@ void *producer(void *arg)
 				id_dataprod++;
 				continue;
 			}
-			if (pthread_mutex_trylock(&so->prod[id_dataprod]->lock))
+			if (pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
 			{
 				so->prod[id_dataprod]->finished = false;
 				so->prod[id_dataprod]->line = strdup(line);
@@ -70,6 +70,7 @@ void *producer(void *arg)
 				pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
 				i++;
 				done = true;
+				id_dataprod++;
 			}
 			else
 			{
@@ -108,14 +109,15 @@ void *consumer(void *arg)
 		if (pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
 		{
 			line = so->prod[id_dataprod]->line;
+			printf("Cons_%x: [%02d:%02d] %s",
+				   (unsigned int)pthread_self(), i, so->linenum, line);
 			free(so->prod[id_dataprod]->line);
 			so->prod[id_dataprod]->line = NULL;
 			so->prod[id_dataprod]->is_full = false;
 			so->prod[id_dataprod]->finished = true;
 			pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
 			i++;
-			printf("Cons_%x: [%02d:%02d] %s",
-				   (unsigned int)pthread_self(), i, so->linenum, line);
+			id_dataprod++;
 		}
 		else
 		{
@@ -208,8 +210,6 @@ int main(int argc, char *argv[])
 	while (!all_is_finished) {
 		all_is_finished = true;
 		for (i = 0; i < Nprod * PROD_MULTIPLICATOR; i++) {
-			printf("main: checking prod[%d] finished=%d\n", i, share->prod[i]->finished);
-			printf("main: checking prod[%d] is_full=%d\n", i, share->prod[i]->is_full);
 			if (share->prod[i]->finished == false) {
 				all_is_finished = false;
 				break;
