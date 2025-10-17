@@ -12,6 +12,7 @@ typedef struct {
 
 void init_stats(CharStats *stats);
 void update_stats_in_line(char *line, CharStats *stats);
+void update_stats_in_chunk(char *chunk, CharStats *stats);
 void accumulate_stats(CharStats *stats_main, CharStats *stats_thread);
 void print_stats(CharStats *stats);
 

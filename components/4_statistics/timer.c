@@ -3,7 +3,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <sys/resource.h>
-#include "performance.h"
+#include "timer.h"
 
 void start_timer(MetricsTimer *timer) {
     if (clock_gettime(CLOCK_MONOTONIC, &timer->start_wall) != 0) {
