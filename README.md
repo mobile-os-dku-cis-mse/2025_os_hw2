@@ -14,7 +14,8 @@ project-root/
 │ ├── prod_cons.c
 │ ├── pthread.c
 │ ├── char_stat.c
-│ └── prod_cons.h
+│ ├── prod_cons.h
+│ └── Makefile
 ├── README.md
 ├── LICENSE
 └── Assignment2 - Multi-threaded word count Document (유준혁, 32212808, Department of MSE)
