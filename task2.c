@@ -84,7 +84,7 @@ void *consumer(void *arg) {
                 if (line == NULL) {
                         break;
                 }
-                printf("Consumer_%x: [%03d] %s", (unsigned int)pthread_self(), i, line);
+                //printf("Consumer_%x: [%03d] %s", (unsigned int)pthread_self(), i, line);
         	free(line);
         	i++;
         }
