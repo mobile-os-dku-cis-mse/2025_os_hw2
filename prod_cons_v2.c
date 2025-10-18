@@ -67,7 +67,8 @@ static void q_push(line_queue_t *q, char *line) {
     pthread_mutex_unlock(&q->m);
 }
 
-// Returns 1 if a line was popped; 0 if queue is empty and producer done (i.e., no more work)
+// Returns 1 if a line was popped;
+// 0 if queue is empty and producer done
 static int q_pop(line_queue_t *q, char **out_line) {
     pthread_mutex_lock(&q->m);
     while (q->count == 0 && !q->done) {
@@ -147,6 +148,16 @@ typedef struct {
     unsigned long local_alpha[26]; // per-thread counts to reduce contention
 } cons_arg_t;
 
+static void count_alphabet(const char *s, unsigned long alpha[26]) {
+    for (const unsigned char *p = (const unsigned char*)s; *p; ++p) {
+        if (isalpha(*p)) {
+            int idx = tolower(*p) - 'a';
+            if (0 <= idx && idx < 26)
+                alpha[idx]++;
+        }
+    }
+}
+
 static void *consumer_main(void *argp) {
     cons_arg_t *arg = (cons_arg_t*)argp;
     shared_t *S = arg->S;
@@ -158,9 +169,9 @@ static void *consumer_main(void *argp) {
         if (S->print_lines) {
             // include thread id and index to mimic original sample style
             printf("Cons_%02d: %s", arg->id, line);
-            if (line[0] && line[strlen(line)-1] != '\n')
-                printf("\n");
+            if (line[0] && line[strlen(line)-1] != '\n') printf("\n");
         }
+        count_alphabet(line, arg->local_alpha);
         free(line);
         line = NULL;
         consumed++;
@@ -175,6 +186,20 @@ static void *consumer_main(void *argp) {
 
     arg->consumed = consumed;
     return NULL;
+}
+
+static void print_alpha_stats(const unsigned long alpha[26]) {
+    printf("\n=== Alphabet frequency (A..Z, case-insensitive) ===\n");
+    for (int i = 0; i < 26; ++i) {
+        printf("%c: %lu\n", 'A' + i, alpha[i]);
+    }
+
+    // Optional: one-row summary like char_stat.c
+    printf("\nSummary row (A..Z):\n");
+    for (int i = 0; i < 26; ++i) {
+        printf("%8lu", alpha[i]);
+    }
+    printf("\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -242,6 +267,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < ncons; ++i) total_consumed += cargs[i].consumed;
     printf("Consumed lines: %ld (across %d consumers)\n", total_consumed, ncons);
     printf("Elapsed time: %.3f ms\n", t1 - t0);
+
+    print_alpha_stats(S.global_alpha);
 
     fclose(rf);
     q_destroy(&S.queue);
