@@ -5,7 +5,7 @@
 #include <string.h>
 #include <semaphore.h>
 
-#define BUFFER_SIZE 10
+#define BUFFER_SIZE 100
 //max amount of prods cant be more than BUFFER_SIZE
 
 typedef struct sharedobject {
