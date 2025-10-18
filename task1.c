@@ -129,12 +129,12 @@ int main (int argc, char *argv[])
 		pthread_create(&cons[i], NULL, consumer, share);
 	printf("main continuing\n");
 
-	for (i = 0 ; i < Nprod ; i++) {
+	for (i = 0 ; i < Ncons ; i++) {
 		rc = pthread_join(cons[i], (void **) &ret);
 		printf("main: consumer_%d joined with %d\n", i, *ret);
 		free(ret);
 	}
-	for (i = 0 ; i < Ncons ; i++) {
+	for (i = 0 ; i < Nprod ; i++) {
 		rc = pthread_join(prod[i], (void **) &ret);
 		printf("main: producer_%d joined with %d\n", i, *ret);
 		free(ret);
