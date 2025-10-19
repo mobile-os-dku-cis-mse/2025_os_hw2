@@ -7,7 +7,11 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 
-#define PROD_MULTIPLICATOR 2
+#define MAX_STRING_LENGTH 30
+#define ASCII_SIZE 256
+
+atomic_int stat[MAX_STRING_LENGTH];
+atomic_int stat2[ASCII_SIZE];
 
 typedef struct so_producer_s
 {
@@ -25,7 +29,43 @@ typedef struct sharedobject
 	so_producer_t **prod;
 	int Ndataprod;
 	bool all_done;
+	bool stats_computed;
+	bool no_print;
 } so_t;
+
+void update_stats(char *line)
+{
+	char *cptr = NULL;
+	char *substr = NULL;
+	char *brka = NULL;
+	char *sep = "{}()[],;\" \n\t^";
+	size_t length = 0;
+
+	cptr = line;
+	for (substr = strtok_r(cptr, sep, &brka); substr; substr = strtok_r(NULL, sep, &brka))
+	{
+		length = strlen(substr);
+		// update stats
+
+		// length of the sub-string
+		if (length >= 30)
+			length = 30;
+		atomic_fetch_add(&stat[length - 1], 1);
+
+		// number of the character in the sub-string
+		for (int i = 0; i < length; i++)
+		{
+			if (*cptr < 256 && *cptr > 1)
+			{
+				atomic_fetch_add(&stat2[*cptr], 1);
+			}
+			cptr++;
+		}
+		cptr++;
+		if (*cptr == '\0')
+			break;
+	}
+}
 
 void *producer(void *arg)
 {
@@ -39,6 +79,7 @@ void *producer(void *arg)
 	int id_dataprod = 0;
 	bool done = false;
 	int actual_linenum = 0;
+
 	while (1)
 	{
 		id_dataprod = 0;
@@ -56,13 +97,14 @@ void *producer(void *arg)
 			{
 				id_dataprod = 0;
 			}
-			if (so->prod[id_dataprod]->is_full == true)
+			if (so->prod[id_dataprod]->is_full != true && pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
 			{
-				id_dataprod++;
-				continue;
-			}
-			if (pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
-			{
+				if (so->prod[id_dataprod]->is_full == true)
+				{
+					pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
+					id_dataprod++;
+					continue;
+				}
 				so->prod[id_dataprod]->finished = false;
 				so->prod[id_dataprod]->line = strdup(line);
 				so->prod[id_dataprod]->is_full = true;
@@ -70,7 +112,6 @@ void *producer(void *arg)
 				pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
 				i++;
 				done = true;
-				id_dataprod++;
 			}
 			else
 			{
@@ -101,21 +142,28 @@ void *consumer(void *arg)
 				break;
 			id_dataprod = 0;
 		}
-		if (so->prod[id_dataprod]->is_full == false)
+		if (so->prod[id_dataprod]->is_full != false && pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
 		{
-			id_dataprod++;
-			continue;
-		}
-		if (pthread_mutex_trylock(&so->prod[id_dataprod]->lock) == 0)
-		{
+			if (so->prod[id_dataprod]->is_full == false)
+			{
+				pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
+				id_dataprod++;
+				continue;
+			}
 			line = so->prod[id_dataprod]->line;
-			printf("Cons_%x: [%02d:%02d] %s",
-				   (unsigned int)pthread_self(), i, so->linenum, line);
-			free(so->prod[id_dataprod]->line);
+			if (!so->no_print)
+				printf("Cons_%x: [%02d:%02d] %s",
+					   (unsigned int)pthread_self(), i, so->linenum, line);
 			so->prod[id_dataprod]->line = NULL;
 			so->prod[id_dataprod]->is_full = false;
 			so->prod[id_dataprod]->finished = true;
 			pthread_mutex_unlock(&so->prod[id_dataprod]->lock);
+			if (line != NULL)
+			{
+				if (so->stats_computed)
+					update_stats(line);
+				free(line);
+			}
 			i++;
 			id_dataprod++;
 		}
@@ -140,6 +188,7 @@ int main(int argc, char *argv[])
 	int i;
 	FILE *rfile;
 	bool all_is_finished = false;
+	int sum = 0;
 
 	if (argc == 1)
 	{
@@ -149,6 +198,8 @@ int main(int argc, char *argv[])
 
 	so_t *share = malloc(sizeof(so_t));
 	memset(share, 0, sizeof(so_t));
+	memset(stat, 0, sizeof(stat));
+	memset(stat2, 0, sizeof(stat));
 	rfile = fopen((char *)argv[1], "r");
 	if (rfile == NULL)
 	{
@@ -178,11 +229,25 @@ int main(int argc, char *argv[])
 	else
 		Ncons = 1;
 
+	if (strcmp(argv[argc - 1], "all") == 0)
+	{
+		share->stats_computed = true;
+	}
+	else if (strcmp(argv[argc - 1], "no_print") == 0)
+	{
+		share->stats_computed = true;
+		share->no_print = true;
+	}
+	else
+	{
+		share->stats_computed = false;
+	}
+
 	share->rfile = rfile;
 	share->linenum = 0;
-	share->Ndataprod = Nprod * PROD_MULTIPLICATOR;
-	share->prod = malloc(Nprod * PROD_MULTIPLICATOR * sizeof(so_producer_t *));
-	for (i = 0; i < Nprod * PROD_MULTIPLICATOR; i++)
+	share->Ndataprod = Nprod + Ncons;
+	share->prod = malloc(share->Ndataprod * sizeof(so_producer_t *));
+	for (i = 0; i < share->Ndataprod; i++)
 	{
 		share->prod[i] = malloc(sizeof(so_producer_t));
 		memset(share->prod[i], 0, sizeof(so_producer_t));
@@ -207,10 +272,13 @@ int main(int argc, char *argv[])
 		printf("main: producer_%d joined with %d\n", i, *ret);
 		free(ret);
 	}
-	while (!all_is_finished) {
+	while (!all_is_finished)
+	{
 		all_is_finished = true;
-		for (i = 0; i < Nprod * PROD_MULTIPLICATOR; i++) {
-			if (share->prod[i]->finished == false) {
+		for (i = 0; i < share->Ndataprod; i++)
+		{
+			if (share->prod[i]->finished == false)
+			{
 				all_is_finished = false;
 				break;
 			}
@@ -224,11 +292,38 @@ int main(int argc, char *argv[])
 		printf("main: consumer_%d joined with %d\n", i, *ret);
 		free(ret);
 	}
-	for (i = 0; i < Nprod * PROD_MULTIPLICATOR; i++)
+	if (share->stats_computed)
+	{
+		for (i = 0; i < 30; i++)
+		{
+			sum += stat[i];
+		}
+		printf("*** print out distributions *** \n");
+		printf("  #ch  freq \n");
+		for (i = 0; i < 30; i++)
+		{
+			int j = 0;
+			int num_star = stat[i] * 80 / sum;
+			printf("[%3d]: %4d \t", i + 1, stat[i]);
+			for (j = 0; j < num_star; j++)
+				printf("*");
+			printf("\n");
+		}
+		printf("       A        B        C        D        E        F        G        H        I        J        K        L        M        N        O        P        Q        R        S        T        U        V        W        X        Y        Z\n");
+		printf("%8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d\n",
+			   stat2['A'] + stat2['a'], stat2['B'] + stat2['b'], stat2['C'] + stat2['c'], stat2['D'] + stat2['d'], stat2['E'] + stat2['e'],
+			   stat2['F'] + stat2['f'], stat2['G'] + stat2['g'], stat2['H'] + stat2['h'], stat2['I'] + stat2['i'], stat2['J'] + stat2['j'],
+			   stat2['K'] + stat2['k'], stat2['L'] + stat2['l'], stat2['M'] + stat2['m'], stat2['N'] + stat2['n'], stat2['O'] + stat2['o'],
+			   stat2['P'] + stat2['p'], stat2['Q'] + stat2['q'], stat2['R'] + stat2['r'], stat2['S'] + stat2['s'], stat2['T'] + stat2['t'],
+			   stat2['U'] + stat2['u'], stat2['V'] + stat2['v'], stat2['W'] + stat2['w'], stat2['X'] + stat2['x'], stat2['Y'] + stat2['y'],
+			   stat2['Z'] + stat2['z']);
+	}
+	for (i = 0; i < share->Ndataprod; i++)
 	{
 		pthread_mutex_destroy(&share->prod[i]->lock);
 		free(share->prod[i]);
 	}
+	free(share->prod);
 	fclose(rfile);
 	free(share);
 	pthread_exit(NULL);

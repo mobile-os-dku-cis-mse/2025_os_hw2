@@ -36,8 +36,14 @@
 
 ***Remarks: We are losing time because the file is so light that what takes more time is the threads handling.***
 
-- Execution Time with 5 thread each (**Huge file** (5 GB)): _3m12,696s_
+- Execution Time with 5 threads each (**Huge file** (5 GB)): _4m40,969s_
+
+- Execution Time with 5 threads each and statistics (**Huge file** (5 GB)): _5m3,589s_
+
+- Execution Time with 5 threads each and statistics but without printing (**Huge file** (5 GB)): 0m27,052s
+
+- Execution Time with 1 threads each and statistics but without printing (**Huge file** (5 GB)): 0m26,681s
+
+**We see that the threads are here to optimize the IO because there is almost no difference between the *5 threads each* and *1 threads each* tests without printing.**
 
 ---
-
-*Note: Update this document as new versions are tested.*

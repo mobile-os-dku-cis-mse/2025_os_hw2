@@ -1,55 +1,107 @@
-# os_hw2
-HW2: Multi-threaded word count
+# OS Homework 2 — Producer/Consumer Program (Version 2)
 
-**Due date: Oct. 19th**
+## 🧩 Overview
 
-The second homework is about multi-thread programming with some synchronization.
-Thread is a unit of execution; a thread has execution context, 
-    which includes the registers, stack.
-Note that address space (memory) is shared among threads in a process, 
-    so there is no clear separation and protection for memory access among threads.
+This project implements a **Producer/Consumer system** in C using **POSIX threads (pthreads)**, **mutexes**, and **condition variables**.  
+The goal is to process data from a file using multiple producers and consumers, while synchronizing them efficiently.
 
-The example code includes some primitive code for multiple threads usage.
-It basically tries to read a file and print it out on the screen.
-It consists of three threads: main thread for admin job 
-    second thread serves as a producer: reads lines from a file, and put the line string on the shared buffer
-    third thread serves as a consumer:  get strings from the shared buffer, and print the line out on the screen
+This work is part of the **Operating Systems** course (Homework 2).
 
-Unfortunately, the code is not working because threads runs independently from others.
-the result is that different threads access invalid memory, and have wrong value, and crash or waiting for terminated thread infinitely.
-To make it working, you have to touch the code so that the threads have correct value.
+---
 
-To have correct values in threads, you need to keep consistency for data touched by multiple threads.
-To keeping consistency, you should carefully control the execution among threads, which is called as synchronization.
+## ⚙️ How to Run
 
-pthread_mutex_lock()/pthread_mutex_unlock are the functions for pthreads synchorinization.
-For condition variable, you may need to look up functions such as pthread_cond_wait()/pthread_cond_signal().
+To compile the program:
 
-The goals from HW2 are 
+```bash
+gcc prod_conv_v2.c -o prod_conv_v2 -lpthread  
+```
 
-1. correct the code for prod_cons.c so that it works with 1 producer and 1 consumer
+Then, to execute it:
 
-2. enhance it to support multiple consumers.
+```bash
+./prod_conv_v2 [filename] [nb_producers] [nb_consumers] [mode]  
+```
 
-3. Make consumer(s) to gather some statistics of the given text in the file. 
-Basically, count the number of each alphabet character in the line.
-char_stat.c can be a hint for gathering statistics.
-At the end of execution, you should print out the statistics of the entire text.
-Beat the fastest execution, maximizing the concurrency!
+### 🔸 Arguments
 
-To run a program, you may give filename to read and # of producers and # of consumers.
-In case of single producer, 2 consumers, reading 'sample file'; you may need to execute your program by
-./prod_cons ./sample 1 2 
+| Argument | Description |
+|-----------|-------------|
+| **1st argument** | **Input filename** to be processed *(mandatory)* |
+| **2nd argument** | Number of producer threads *(optional, default = 1)* |
+| **3rd argument** | Number of consumer threads *(optional, default = 1)* |
+| **4th argument (optional)** | Output mode (see below) |
 
-You can download some example input source code from the link: [https://mobile-os.dankook.ac.kr/data/FreeBSD9-orig.tar] or  
-you can use /opt/FreeBSD9-orig.tar from our server.
+### 🔸 Optional last argument
 
-Please make some document so that I can follow to build/compile and run the code.
-It would be better if the document includes some introduction and some important implementation details or your program structure.
+| Argument | Description |
+|-----------|-------------|
+| `all` | Displays both file outputs and detailed statistics |
+| `no_print` | Displays only statistics, no file output |
+| *(nothing)* | Displays only the file output |
 
-htop is a program that shows threads execution in the system.
+🧠 Example usages:
 
-Measure & compare of execution time for different # of threads
+```bash  
+./prod_conv_v2 input.txt  
+./prod_conv_v2 input.txt 2 5  
+./prod_conv_v2 input.txt 5 5 all  
+./prod_conv_v2 input.txt no_print  
+```
 
-Happy hacking!
-Seehwan
+---
+
+## 🧪 Experimental Results
+
+### Version 1 (Baseline)
+The first version of the program was functional but not optimized for large files.  
+While performance was acceptable for small files, it became **extremely slow on large inputs (5 GB)** due to inefficient thread and I/O handling.
+
+### Version 2 (Optimized)
+The second version focused on improving synchronization and reducing unnecessary waits between threads.  
+For small files, execution times became almost instantaneous, and for large files, there was a **notable improvement** compared to Version 1.
+
+However, the results show that:
+- For **light files**, the **thread management overhead** dominates — adding more threads doesn’t help much.
+- For **large files**, the performance is **mainly I/O-bound**.  
+  Increasing the number of threads provides limited gains, since disk I/O becomes the bottleneck.
+
+---
+
+## 📊 Interpretation
+
+- **Single-thread vs multi-thread:**  
+  Multithreading doesn’t significantly improve speed for small data due to thread creation and synchronization overhead.
+
+- **I/O-bound operations:**  
+  The main limitation is the **file reading/writing speed**, not CPU computation. Even with multiple threads, the gain is minimal once the disk is saturated.
+
+- **Effect of print statements:**  
+  Printing to the console slows down the program drastically.  
+  When the printing is disabled (`no_print` mode), the same large file (5 GB) is processed in **~27 seconds**, compared to **~5 minutes** with output enabled.  
+  This clearly shows that **I/O to the terminal** is much slower than memory or disk operations.
+
+---
+
+## 🧠 Conclusion
+
+Version 2 provides **a much more efficient and cleaner multithreaded design**, especially when managing large data with minimized I/O.  
+While the system remains limited by file access speed, the use of `pthread_mutex_t` ensures robust and synchronized operation between producers and consumers.
+
+**Key takeaway:**  
+> Optimize I/O operations first — thread parallelism can’t overcome a slow output stream.
+
+---
+
+## 🧰 Technical Notes
+
+- **Language:** C (POSIX standard)
+- **Threads:** `pthread_create`, `pthread_join`
+- **Synchronization:** `pthread_mutex_t`, `pthread_cond_t`
+- **Compilation:** `gcc -lpthread`
+- **Platform:** Linux
+
+---
+
+✍️ *Author: Kylian Labrador*  
+🧠 *Course: Operating Systems*
