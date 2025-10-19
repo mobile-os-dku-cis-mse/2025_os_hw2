@@ -13,12 +13,12 @@ OBJ	= 	$(SRC:%.c=$(BUILD_DIR)%.o)
 
 NAME	=	PROD
 
-CFLAGS 	= -I include/ -Wall -Wextra -g
+CFLAGS 	= -I include/ -Wall -Wextra -g 
 
 all:	$(NAME)
 
 $(NAME):	$(OBJ)
-		gcc -o $(NAME) $(SRC) $(CFLAGS) -g
+		gcc -o $(NAME) $(SRC) $(CFLAGS) -pthread
 	@ echo "PROD  compiled"
 
 clean:

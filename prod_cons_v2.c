@@ -211,6 +211,7 @@ int main(int argc, char *argv[]) {
     const char *path = argv[1];
     int nprod = atoi(argv[2]);
     int ncons = atoi(argv[3]);
+    int print_lines = 1;
 
     if (nprod < 1) 
         nprod = 1;
@@ -228,7 +229,7 @@ int main(int argc, char *argv[]) {
     q_init(&S.queue, QUEUE_CAP);
     memset(S.global_alpha, 0, sizeof(S.global_alpha));
     pthread_mutex_init(&S.global_lock, NULL);
-    S.print_lines = 1;
+    S.print_lines = print_lines;
 
     // Producer(s): we support only one; ignore extras gracefully
     prod_arg_t parg = { .S = &S, .produced = 0 };
