@@ -1,4 +1,4 @@
-# OS Homework 2 — Producer/Consumer Program (Version 2)
+# OS Homework 2 — Producer/Consumer Program
 
 ## 🧩 Overview
 
