@@ -2,7 +2,7 @@
 
 ## 🧩 Overview
 
-This project implements a **Producer/Consumer system** in C using **POSIX threads (pthreads)**, **mutexes**, and **condition variables**.  
+This project implements a **Producer/Consumer system** in C using **POSIX threads (pthreads)** and **mutexes** 
 The goal is to process data from a file using multiple producers and consumers, while synchronizing them efficiently.
 
 This work is part of the **Operating Systems** course (Homework 2).
