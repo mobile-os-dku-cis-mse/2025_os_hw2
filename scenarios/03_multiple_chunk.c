@@ -1,105 +1,186 @@
+#define _XOPEN_SOURCE 700
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
+
+#include "../components/1_reader/chunk_reader.h"
+#include "../components/2_buffer/multiple_chunk_buffer.h"
 #include "../components/3_processor/char_stat.h"
 #include "../components/4_statistics/timer.h"
-#include "../components/2_buffer/multiple_chunk.h"
+#include "../components/common.h"
+
+#define CHUNK_SIZE 4096
+typedef struct {
+    int id;
+    int handledChunks;
+    MultiChunkBuffer *so;
+    CharStats *stats;
+} ConsumerThread;
+
+typedef struct {
+    int id;
+    MultiChunkBuffer *so;
+    char *filename;
+    ReadRange range;
+} ProducerThread;
+
+void *producer(void *arg) {
+    ProducerThread *pt = (ProducerThread *)arg;
+    MultiChunkBuffer *buffer = pt->so;
+    
+    FILE *file = fopen(pt->filename, "r");
+    if (!file) { perror("fopen"); exit(1); }
+    
+    ChunkReader reader;
+    chunk_reader_init(&reader, file, pt->range, CHUNK_SIZE);
+
+    int count = 0;
+    while (chunk_reader_has_more(&reader)) {
+        DataUnit unit = chunk_reader_next(&reader);
+        
+        if (unit.data != NULL) {
+            mcb_put(buffer, unit);
+            count++;
+        }
+    }
+
+    chunk_reader_destroy(&reader);
+    fclose(file);
+    
+    mcb_notify_producer_finished(buffer);
+
+    int *ret = malloc(sizeof(int));
+    *ret = count;
+    
+    printf("Prod_%x: %d chunks\n", (unsigned int)pthread_self(), count);
+    
+    return ret;
+}
+
+void *consumer(void *arg) {
+    ConsumerThread *ct = (ConsumerThread *)arg;
+    MultiChunkBuffer *buffer = ct->so;
+
+    int count = 0;
+    DataUnit unit;
+
+    while (1) {
+        unit = mcb_get(buffer);
+        if (unit.data == NULL) break;
+
+        // printf("Cons_%x: [%02d:%02d] %zu bytes\n",
+        //        (unsigned int)pthread_self(), ct->id, unit.id, unit.size);
+
+        update_stats_in_chunk((char*)unit.data, ct->stats);
+        
+        free(unit.data);
+        count++;
+    }
+
+    ct->handledChunks = count;
+    printf("Cons: %d chunks\n", count);
+
+    return NULL;
+}
 
 int main(int argc, char *argv[]) {
     pthread_t prod[100];
     pthread_t cons[100];
-    int Nprod, Ncons;
-    FILE *rfile;
+    int Nprod, Ncons, BufferSize;
+    int rc;
+    int *ret_producer;
+    int i;
     MetricsTimer timer;
 
-    if (argc < 2) {
-        printf("usage: ./prod_cons_single <file> [#prod] [#cons]\n");
+    if (argc == 1) {
+        printf("usage: ./prod_cons <readfile> #Producer #Consumer [BufferSize]\n");
         exit(0);
     }
 
-    rfile = fopen(argv[1], "r");
-    if (!rfile) {
-        perror("fopen");
-        exit(1);
-    }
+    if (argv[2] != NULL) Nprod = atoi(argv[2]); else Nprod = 1;
+    if (Nprod > 100) Nprod = 100; if (Nprod == 0) Nprod = 1;
 
-    Nprod = (argc > 2) ? atoi(argv[2]) : 1;
-    Ncons = (argc > 3) ? atoi(argv[3]) : 1;
-    if (Nprod > 100) Nprod = 100;
-    if (Nprod <= 0) Nprod = 1;
-    if (Ncons > 100) Ncons = 100;
-    if (Ncons <= 0) Ncons = 1;
+    if (argv[3] != NULL) Ncons = atoi(argv[3]); else Ncons = 1;
+    if (Ncons > 100) Ncons = 100; if (Ncons == 0) Ncons = 1;
 
-    start_timer(&timer);
+    if (argc > 4 && argv[4] != NULL) BufferSize = atoi(argv[4]); else BufferSize = 10;
+    if (BufferSize <= 0) BufferSize = 10;
 
-    FileReader file;
-    MultipleChunkBuffer* buffer = malloc(sizeof(MultipleChunkBuffer)*Nprod);
-
-    init_file_reader(&file, rfile);
+    MultiChunkBuffer *share = malloc(sizeof(MultiChunkBuffer));
+    mcb_init(share, Nprod, BufferSize);
 
     CharStats stats_main;
     init_stats(&stats_main);
 
-    ProducerThread *producers = malloc(sizeof(ProducerThread) * Nprod);
-    long chunk_size = file.file_size / Nprod;
-    for (int i = 0; i < Nprod; i++) {
-        WorkRange *work = malloc(sizeof(WorkRange));
-        work ->start_offset = i * chunk_size;
-        work ->end_offset = (i == Nprod - 1) ? file.file_size : (i + 1) * chunk_size;
-        work ->current_offset = work->start_offset;
+    start_timer(&timer);
 
-        init_multiple_slot_buffer(&buffer[i]);
+    ConsumerThread* consumers = malloc(sizeof(ConsumerThread) * Ncons);
+    ProducerThread* producers = malloc(sizeof(ProducerThread) * Nprod);
 
-        producers[i].file = &file;
-        producers[i].so = &buffer[i];
-        producers[i].work_range = work;
+    FILE *fp = fopen(argv[1], "r");
+    if (!fp) { perror("fopen main"); exit(1); }
+    fseek(fp, 0, SEEK_END);
+    long filesize = ftell(fp);
+    fclose(fp);
+
+    long chunk_size_file = filesize / Nprod;
+
+    for (i = 0; i < Nprod; i++) {
         producers[i].id = i;
+        producers[i].so = share;
+        producers[i].filename = argv[1];
+        
+        producers[i].range.start = i * chunk_size_file;
+        producers[i].range.end = (i == Nprod - 1) ? filesize : (i + 1) * chunk_size_file;
+
         pthread_create(&prod[i], NULL, producer, &producers[i]);
     }
 
-    ConsumerThread *consumers = malloc(sizeof(ConsumerThread) * Ncons);
-    for (int i = 0; i < Ncons; i++) {
-        init_consumer_thread(&consumers[i], &buffer[i]);
+    for (i = 0; i < Ncons; i++) {
+        consumers[i].handledChunks = 0;
+        consumers[i].so = share;
+        consumers[i].stats = malloc(sizeof(CharStats));
+        init_stats(consumers[i].stats);
         consumers[i].id = i;
 
         pthread_create(&cons[i], NULL, consumer, &consumers[i]);
     }
 
-    int total_chunks = 0;
-    for (int i = 0; i < Nprod; i++) {
-        pthread_join(prod[i], NULL);
-        total_chunks += producers[i].handledChunks;
-        free(producers[i].work_range);
-    }
+    printf("main continuing\n");
 
-    size_t total_bytes = 0;
-    for (int i = 0; i < Ncons; i++) {
-        pthread_join(cons[i], NULL);
-        total_bytes += consumers[i].handledBytes;
+    int sum_c = 0;
+    int sum_p = 0;
+
+    for (i = 0; i < Ncons; i++) {
+        rc = pthread_join(cons[i], NULL);
+        printf("main: consumer_%d joined with %d\n", consumers[i].id, consumers[i].handledChunks);
+        sum_c += consumers[i].handledChunks;
+
         accumulate_stats(&stats_main, consumers[i].stats);
         free(consumers[i].stats);
     }
+    free(consumers);
+
+    for (i = 0; i < Nprod; i++) {
+        rc = pthread_join(prod[i], (void **) &ret_producer);
+        printf("main: producer_%d joined with %d\n", i, *ret_producer);
+        sum_p += *ret_producer;
+        free(ret_producer);
+    }
+    free(producers);
 
     stop_timer(&timer);
-    printf("========================================\n");
-    printf("=== SINGLE SLOT BUFFER VERSION ===\n");
-    printf("========================================\n");
-    printf("File: %s\n", argv[1]);
-    printf("Producers: %d, Consumers: %d\n", Nprod, Ncons);
-    printf("Buffer: 1 slot (blocking)\n");
-    printf("Chunk size: %d bytes\n\n", CHUNK_SIZE);
+    
+    mcb_destroy(share);
+    free(share);
 
-    printf("\n=== SINGLE SLOT Results ===\n");
-    printf("Total chunks: %d\n", total_chunks);
-    printf("Total bytes: %zu\n", total_bytes);
-    print_metrics(&timer, Ncons, Nprod);
+    printf("main continuing\n");
     print_stats(&stats_main);
+    printf("sum_c: %d \nsum_p: %d", sum_c, sum_p);
+    print_metrics(&timer, Ncons, Nprod);
 
-    free(buffer);
-    free(consumers);
-    free(producers);
-    fclose(rfile);
-
-    return 0;
+    pthread_exit(NULL);
 }
