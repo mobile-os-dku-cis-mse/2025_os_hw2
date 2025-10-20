@@ -38,17 +38,12 @@ void update_stats_in_line(char *line, CharStats *stats) {
 void update_stats_in_chunk(char *chunk, CharStats *stats) {
     if (chunk == NULL || stats == NULL) return;
 
-    char *chunk_copy = strdup(chunk);
-    if (chunk_copy == NULL) return;
-
     char *line = NULL;
     char *brka = NULL;
 
-    for (line = strtok_r(chunk_copy, "\n", &brka); line != NULL; line = strtok_r(NULL, "\n", &brka)) {
+    for (line = strtok_r(chunk, "\n", &brka); line != NULL; line = strtok_r(NULL, "\n", &brka)) {
         update_stats_in_line(line, stats);
     }
-
-    free(chunk_copy);
 }
 
 void accumulate_stats(CharStats *stats_main, CharStats *stats_thread) {
