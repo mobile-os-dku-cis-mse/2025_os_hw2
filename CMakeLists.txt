@@ -5,6 +5,15 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
 
+option(TSAN "Enable ThreadSanitizer (TSan)" OFF)
+
+if(TSAN)
+    message(STATUS "Building with ThreadSanitizer enabled")
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+endif()
+
+
 # --- internal library with all implementation files ---
 add_library(hw2_internal STATIC
     src/pthread_demo.c
