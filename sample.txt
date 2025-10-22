@@ -1,0 +1,5 @@
+Hello World
+This is a test file
+Counting characters with multiple threads
+for i in {1..10000}; do echo "This is line number $i for testing multi-threaded character counting." >> big_sample.txt; done
+
