@@ -17,75 +17,121 @@
 #include "../components/4_statistics/timer.h"
 #include "../components/common.h"
 
+
 #define CHUNK_SIZE 4096
+
 
 typedef struct {
     double io_time_sec;
+
     double wait_time_sec;
+
     double cpu_proc_time_sec;
+
     long chunks_processed;
+
+    long min_page_faults;
+
+    long maj_page_faults;
+
     long voluntary_switches;
 } ThreadMetrics;
 
-typedef struct {
-    int id;
-    int handledChunks;
-    MultiChunkBuffer *so;
-    CharStats *stats;
-    ThreadMetrics metrics;
-} ConsumerThread;
 
 typedef struct {
     int id;
+
+    int handledChunks;
+
     MultiChunkBuffer *so;
+
+    CharStats *stats;
+
+    ThreadMetrics metrics;
+} ConsumerThread;
+
+
+typedef struct {
+    int id;
+
+    MultiChunkBuffer *so;
+
     char *filename;
+
     ReadRange range;
+
     ThreadMetrics metrics;
 } ProducerThread;
+
 
 void tm_start(struct timespec *ts) {
     clock_gettime(CLOCK_MONOTONIC, ts);
 }
 
+
 double tm_stop(struct timespec *ts) {
     struct timespec end;
+
     clock_gettime(CLOCK_MONOTONIC, &end);
+
     return (end.tv_sec - ts->tv_sec) + (end.tv_nsec - ts->tv_nsec) / 1e9;
 }
 
+
 void tm_update_rusage(ThreadMetrics *tm) {
     struct rusage usage;
+
     if (getrusage(RUSAGE_THREAD, &usage) == 0) {
+        tm->min_page_faults = usage.ru_minflt;
+
+        tm->maj_page_faults = usage.ru_majflt;
+
         tm->voluntary_switches = usage.ru_nvcsw;
     }
 }
 
+
 void *producer(void *arg) {
     ProducerThread *pt = (ProducerThread *) arg;
+
     ChunkReader reader;
+
     struct timespec ts;
+
 
     memset(&pt->metrics, 0, sizeof(ThreadMetrics));
 
+
     FILE *file = fopen(pt->filename, "r");
+
     if (!file) {
         perror("fopen");
         exit(1);
     }
 
+
     chunk_reader_init(&reader, file, pt->range, CHUNK_SIZE);
+
 
     while (1) {
         tm_start(&ts);
+
         int has_more = chunk_reader_has_more(&reader);
+
         if (!has_more) break;
+
         DataUnit unit = chunk_reader_next(&reader);
+
         pt->metrics.io_time_sec += tm_stop(&ts);
+
 
         if (unit.data != NULL) {
             tm_start(&ts);
+
             mcb_put(pt->so, unit);
+
             pt->metrics.wait_time_sec += tm_stop(&ts);
+
 
             pt->metrics.chunks_processed++;
         } else {
@@ -93,81 +139,152 @@ void *producer(void *arg) {
         }
     }
 
+
     tm_update_rusage(&pt->metrics);
+
     chunk_reader_destroy(&reader);
+
     fclose(file);
+
     mcb_notify_producer_finished(pt->so);
 
+
     int *ret = malloc(sizeof(int));
+
     *ret = pt->metrics.chunks_processed;
+
     return ret;
 }
 
+
 void *consumer(void *arg) {
     ConsumerThread *ct = (ConsumerThread *) arg;
+
     struct timespec ts;
+
 
     memset(&ct->metrics, 0, sizeof(ThreadMetrics));
 
+
     while (1) {
         tm_start(&ts);
+
         DataUnit unit = mcb_get(ct->so);
+
         ct->metrics.wait_time_sec += tm_stop(&ts);
+
 
         if (unit.data == NULL) break;
 
+
         tm_start(&ts);
+
         update_stats_in_chunk((char *) unit.data, ct->stats);
+
         ct->metrics.cpu_proc_time_sec += tm_stop(&ts);
 
+
         free(unit.data);
+
         ct->metrics.chunks_processed++;
     }
 
+
     tm_update_rusage(&ct->metrics);
+
     ct->handledChunks = ct->metrics.chunks_processed;
+
     return NULL;
 }
+
 
 void print_detailed_analysis(ProducerThread *prods, int n_prod, ConsumerThread *cons, int n_cons) {
     printf("\n================ [ Detailed Performance Analysis ] ================\n");
 
+
     printf("\n[Producer Statistics]\n");
-    printf("ID | I/O Time(s) | Put/Wait(s) | CtxSwitch\n");
-    printf("---|-------------|-------------|----------\n");
+
+    printf("ID | I/O Time(s) | Put/Wait(s) | MinFault (RAM) | MajFault (Disk) | CtxSwitch\n");
+
+    printf("---|-------------|-------------|----------------|-----------------|----------\n");
+
 
     double total_io = 0, total_prod_wait = 0;
 
+    long total_maj_fault = 0;
+
+
     for (int i = 0; i < n_prod; i++) {
         printf("%2d | %11.4f | %11.4f | %14ld | %15ld | %9ld\n",
+
                i, prods[i].metrics.io_time_sec, prods[i].metrics.wait_time_sec,
+
+               prods[i].metrics.min_page_faults, prods[i].metrics.maj_page_faults,
+
                prods[i].metrics.voluntary_switches);
+
         total_io += prods[i].metrics.io_time_sec;
+
         total_prod_wait += prods[i].metrics.wait_time_sec;
+
+        total_maj_fault += prods[i].metrics.maj_page_faults;
     }
 
+
     printf("\n[Consumer Statistics]\n");
-    printf("ID | Get/Wait(s) | Process(s)  | Chunks  CtxSwitch\n");
-    printf("---|-------------|-------------|------------------\n");
+
+    printf("ID | Get/Wait(s) | Process(s) | Chunks | MinFault | CtxSwitch\n");
+
+    printf("---|-------------|-------------|--------|----------|----------\n");
+
 
     double total_cons_wait = 0, total_proc = 0;
 
+
     for (int i = 0; i < n_cons; i++) {
-        printf("%2d | %11.4f | %11.4f | %9ld\n",
+        printf("%2d | %11.4f | %11.4f | %6ld | %8ld | %9ld\n",
+
                i, cons[i].metrics.wait_time_sec, cons[i].metrics.cpu_proc_time_sec,
+
+               cons[i].metrics.chunks_processed, cons[i].metrics.min_page_faults,
+
                cons[i].metrics.voluntary_switches);
+
         total_cons_wait += cons[i].metrics.wait_time_sec;
+
         total_proc += cons[i].metrics.cpu_proc_time_sec;
     }
 
-    printf("\n[Bottleneck Diagnosis]\n");
-    printf("1. Avg I/O Time     : %.4f sec  (Producer Disk Read)\n", total_io / n_prod);
-    printf("2. Avg Locking Time : %.4f sec  (Prod Wait: %.4f, Cons Wait: %.4f)\n",
-           (total_prod_wait + total_cons_wait) / (n_prod + n_cons),
-           total_prod_wait / n_prod, total_cons_wait / n_cons);
-    printf("3. Avg Compute Time : %.4f sec  (Consumer Processing)\n", total_proc / n_cons);
 
+    printf("\n[Bottleneck Diagnosis]\n");
+
+    printf("1. Avg I/O Time : %.4f sec (Producer Disk Read)\n", total_io / n_prod);
+
+    printf("2. Avg Locking Time : %.4f sec (Prod Wait: %.4f, Cons Wait: %.4f)\n",
+
+           (total_prod_wait + total_cons_wait) / (n_prod + n_cons),
+
+           total_prod_wait / n_prod, total_cons_wait / n_cons);
+
+    printf("3. Avg Compute Time : %.4f sec (Consumer Processing)\n", total_proc / n_cons);
+
+
+    if (total_maj_fault > 100) {
+        printf(">> [Insight] DISK BOUND: High Major Page Faults. The bottleneck is the Hard Disk.\n");
+    } else {
+        printf(">> [Insight] MEMORY/LOCK BOUND: Data is in Page Cache. Bottleneck is likely Lock Contention.\n");
+    }
+
+
+    if (total_prod_wait / n_prod > total_cons_wait / n_cons) {
+        printf(">> [Insight] BUFFER FULL: Producers are blocked. Consumers are too slow.\n");
+    } else {
+        printf(">> [Insight] BUFFER EMPTY: Consumers are blocked. Producers (I/O) are too slow.\n");
+    }
+
+    printf("===================================================================\n");
 }
+
 
 int main(int argc, char *argv[]) {
     pthread_t prod[100], cons[100];
