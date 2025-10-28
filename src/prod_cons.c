@@ -36,7 +36,7 @@ typedef struct sharedobject {
 } so_t;
 
 void *producer(void *arg) {
-    so_t *so = arg;
+    so_t *so = (so_t*)arg;
     FILE *rfile = so->rfile;
 
     char *line = NULL;
@@ -48,9 +48,9 @@ void *producer(void *arg) {
 
     while (1) {
         pthread_mutex_lock(&so->lock);
-        // while (so->full) {
-        //     pthread_cond_wait(&so->cv, &so->lock);
-        // }
+        while (so->full) {
+            pthread_cond_wait(&so->cv, &so->lock);
+        }
 
         read = getdelim(&line, &len, '\n', rfile);
         if (read == -1) {
@@ -65,7 +65,7 @@ void *producer(void *arg) {
         so->full = 1;
         int pnum = so->linenum;
         char *pline = strdup(so->line);
-        pthread_cond_broadcast(&so->cv);
+        pthread_cond_signal(&so->cv);
         pthread_mutex_unlock(&so->lock);
 
         printf("Prod: [%02d:%02d] %s", cnt, pnum, pline);
@@ -79,7 +79,7 @@ void *producer(void *arg) {
 }
 
 void *consumer(void *arg) {
-    so_t *so = arg;
+    so_t *so = (so_t*)arg;
     int cnt = 0;
 
     while (1) {
@@ -103,7 +103,7 @@ void *consumer(void *arg) {
         char *line_copy = strdup(so->line);
         int num = so->linenum;
         so->full = 0;
-        pthread_cond_broadcast(&so->cv);
+        pthread_cond_signal(&so->cv);
         pthread_mutex_unlock(&so->lock);
 
         printf("Cons_%x: [%02d:%02d] %s", (unsigned int)pthread_self(), cnt, num, line_copy);
