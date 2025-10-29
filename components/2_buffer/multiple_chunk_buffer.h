@@ -26,6 +26,6 @@ void mcb_put(MultiChunkBuffer *buffer, DataUnit unit);
 DataUnit mcb_get(MultiChunkBuffer *buffer);
 void mcb_notify_producer_finished(MultiChunkBuffer *buffer);
 
-// shared
 DataUnit mcb_try_get(MultiChunkBuffer *buffer);
+
 #endif //INC_2025_OS_HW2_MULTIPLE_CHUNK_BUFFER_H

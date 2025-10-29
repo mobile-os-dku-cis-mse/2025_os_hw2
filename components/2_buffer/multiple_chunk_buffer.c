@@ -74,22 +74,18 @@ void mcb_notify_producer_finished(MultiChunkBuffer *buffer) {
     pthread_mutex_unlock(&buffer->lock);
 }
 
-// shared
 DataUnit mcb_try_get(MultiChunkBuffer *buffer) {
-    DataUnit fail_unit = { .data = NULL, .size = 0, .id = -2 }; // -2: Busy or Empty
+    DataUnit fail_unit = { .data = NULL, .size = 0, .id = -2 };
 
-    // 1. Try Lock (성공 시 0 반환) -> 실패하면 즉시 리턴
     if (pthread_mutex_trylock(&buffer->lock) != 0) {
         return fail_unit;
     }
 
-    // 2. 비었는지 확인 -> 비었으면 락 풀고 리턴
     if (buffer->count == 0) {
         pthread_mutex_unlock(&buffer->lock);
         return fail_unit;
     }
 
-    // 3. 데이터 꺼내기 (성공)
     DataUnit item = buffer->data_array[buffer->head];
     buffer->head = (buffer->head + 1) % buffer->capacity;
     buffer->count--;
