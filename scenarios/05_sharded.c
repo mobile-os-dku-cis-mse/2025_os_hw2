@@ -73,7 +73,7 @@ void *consumer(void *arg) {
         if (unit.data == NULL) break;
 
 
-        update_stats_in_chunk((char*)unit.data, ct->stats);
+        update_stats_in_chunk((char*)unit.data, unit.size, ct->stats);
 
         free(unit.data);
         count++;

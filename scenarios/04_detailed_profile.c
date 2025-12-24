@@ -179,7 +179,7 @@ void *consumer(void *arg) {
 
         tm_start(&ts);
 
-        update_stats_in_chunk((char *) unit.data, ct->stats);
+        update_stats_in_chunk((char *) unit.data, unit.size, ct->stats);
 
         ct->metrics.cpu_proc_time_sec += tm_stop(&ts);
 

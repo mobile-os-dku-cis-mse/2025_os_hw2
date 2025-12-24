@@ -67,8 +67,8 @@ void *consumer(void *arg) {
 
     while ((line = slb_get(buffer)) != NULL) {
 
-        printf("Cons_%x: [%02d:%02d] %s",
-               (unsigned int)pthread_self(), ct->id, count, line);
+        // printf("Cons_%x: [%02d:%02d] %s",
+        //        (unsigned int)pthread_self(), ct->id, count, line);
 
         update_stats_in_line(line, ct->stats);
         

@@ -74,7 +74,7 @@ void *consumer(void *arg) {
         // printf("Cons_%x: [%02d:%02d] %zu bytes\n",
         //        (unsigned int)pthread_self(), ct->id, unit.id, unit.size);
 
-        update_stats_in_chunk((char*)unit.data, ct->stats);
+        update_stats_in_chunk((char*)unit.data, unit.size, ct->stats);
         
         free(unit.data);
         count++;

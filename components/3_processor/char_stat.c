@@ -4,6 +4,12 @@
 #include <string.h>
 #include "char_stat.h"
 
+static const unsigned char IS_SEP_TABLE[256] = {
+    ['\0'] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1, [' '] = 1,
+    ['{'] = 1, ['}'] = 1, ['('] = 1, [')'] = 1, ['['] = 1, [']'] = 1,
+    [','] = 1, [';'] = 1, ['\"'] = 1, ['^'] = 1,
+};
+
 void init_stats(CharStats *stats) {
     memset(stats->length_counts, 0, sizeof(stats->length_counts));
     memset(stats->ascii_counts, 0, sizeof(stats->ascii_counts));
@@ -35,14 +41,38 @@ void update_stats_in_line(char *line, CharStats *stats) {
     }
 }
 
-void update_stats_in_chunk(char *chunk, CharStats *stats) {
-    if (chunk == NULL || stats == NULL) return;
+void update_stats_in_chunk(char *chunk, size_t size, CharStats *stats) {
+    if (chunk == NULL || stats == NULL || size == 0) return;
 
-    char *line = NULL;
-    char *brka = NULL;
+    size_t current_word_len = 0;
 
-    for (line = strtok_r(chunk, "\n", &brka); line != NULL; line = strtok_r(NULL, "\n", &brka)) {
-        update_stats_in_line(line, stats);
+    const unsigned char *table = IS_SEP_TABLE;
+    unsigned char *ptr = (unsigned char *)chunk;
+    unsigned char *end = ptr + size;
+
+    while (ptr < end) {
+        unsigned char c = *ptr++;
+
+        if (table[c]) {
+            if (current_word_len > 0) {
+                size_t len = (current_word_len >= 30) ? 30 : current_word_len;
+                stats->length_counts[len - 1]++;
+                stats->total_line++;
+                current_word_len = 0;
+            }
+        } else {
+            current_word_len++;
+
+            if (c > 1 && c < ASCII_SIZE) {
+                stats->ascii_counts[c]++;
+            }
+        }
+    }
+
+    if (current_word_len > 0) {
+        size_t len = (current_word_len >= 30) ? 30 : current_word_len;
+        stats->length_counts[len - 1]++;
+        stats->total_line++;
     }
 }
 
