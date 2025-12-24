@@ -5,11 +5,6 @@
 #include "../common.h"
 
 typedef struct {
-    long start;
-    long end;
-} ReadRange;
-
-typedef struct {
     FILE *file;
     int fd;
     ReadRange range;
@@ -23,4 +18,6 @@ int chunk_reader_has_more(ChunkReader *reader);
 DataUnit chunk_reader_next(ChunkReader *reader);
 void chunk_reader_destroy(ChunkReader *reader);
 
+// 마지막에 추가
+ssize_t chunk_reader_read_into(ChunkReader *reader, char *buffer, size_t max_len);
 #endif

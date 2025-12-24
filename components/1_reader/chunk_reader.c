@@ -51,3 +51,23 @@ DataUnit chunk_reader_next(ChunkReader *reader) {
 void chunk_reader_destroy(ChunkReader *reader) {
     (void)reader;
 }
+// pool
+//
+// ssize_t chunk_reader_read_into(ChunkReader *reader, char *buffer, size_t max_len) {
+//     if (!chunk_reader_has_more(reader)) {
+//         return 0;
+//     }
+//
+//     long remaining = reader->range.end - reader->current;
+//     size_t read_size = (remaining < (long)max_len) ? remaining : max_len;
+//
+//     if (read_size == 0) return 0;
+//
+//     ssize_t bytes_read = pread(reader->fd, buffer, read_size, reader->current);
+//
+//     if (bytes_read > 0) {
+//         reader->current += bytes_read;
+//     }
+//
+//     return bytes_read;
+// }
