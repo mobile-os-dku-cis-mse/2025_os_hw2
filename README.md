@@ -1,55 +1,39 @@
-# os_hw2
-HW2: Multi-threaded word count
 
-**Due date: Oct. 19th**
+- 44GB 크기의 파일로 측정했습니다.
+- 실험 환경
+    - cpu model: Intel(R) Xeon(R) Gold 5320
+    - 52 threads / 26 cores
+    - L1 / L2 / L3 : 1.2  / 32.5 / 39
 
-The second homework is about multi-thread programming with some synchronization.
-Thread is a unit of execution; a thread has execution context, 
-    which includes the registers, stack.
-Note that address space (memory) is shared among threads in a process, 
-    so there is no clear separation and protection for memory access among threads.
+    
+- 3번 시나리오는 제가 baseline으로 잡은 시나리오입니다. 원형큐로 버퍼를 만들었습니다.
+- 5번 시나리오는 락을 분리하여 여러 버퍼를 갖도록 한 시나리오입니다. 개별 버퍼는 3번 시나리오의 버퍼를 사용합니다.
+- 7번 시나리오는 mmap을 사용한 시나리오입니다. 버퍼에는 포인터를 넘겨 copy를 줄인 방식입니다.
+- 이것들에 대한 정리는 /resultsOfScenarios/final_performance_comparison.log에 있습니다.
 
-The example code includes some primitive code for multiple threads usage.
-It basically tries to read a file and print it out on the screen.
-It consists of three threads: main thread for admin job 
-    second thread serves as a producer: reads lines from a file, and put the line string on the shared buffer
-    third thread serves as a consumer:  get strings from the shared buffer, and print the line out on the screen
+| 지표 | 05_sharded | 07_mmap | 03_multi_chunk |
+| --- | --- | --- | --- |
+| 시간 | 02.74 | 04.25 | 20.81 |
 
-Unfortunately, the code is not working because threads runs independently from others.
-the result is that different threads access invalid memory, and have wrong value, and crash or waiting for terminated thread infinitely.
-To make it working, you have to touch the code so that the threads have correct value.
+## 실행 방법
 
-To have correct values in threads, you need to keep consistency for data touched by multiple threads.
-To keeping consistency, you should carefully control the execution among threads, which is called as synchronization.
+시나리오는 최소 3개, 최대 5개의 인자를 받습니다.
 
-pthread_mutex_lock()/pthread_mutex_unlock are the functions for pthreads synchorinization.
-For condition variable, you may need to look up functions such as pthread_cond_wait()/pthread_cond_signal().
+파일 / producer의 개수 / consumer의 개수 / buffer 크기 / shard 개수
 
-The goals from HW2 are 
-
-1. correct the code for prod_cons.c so that it works with 1 producer and 1 consumer
-
-2. enhance it to support multiple consumers.
-
-3. Make consumer(s) to gather some statistics of the given text in the file. 
-Basically, count the number of each alphabet character in the line.
-char_stat.c can be a hint for gathering statistics.
-At the end of execution, you should print out the statistics of the entire text.
-Beat the fastest execution, maximizing the concurrency!
-
-To run a program, you may give filename to read and # of producers and # of consumers.
-In case of single producer, 2 consumers, reading 'sample file'; you may need to execute your program by
-./prod_cons ./sample 1 2 
-
-You can download some example input source code from the link: [https://mobile-os.dankook.ac.kr/data/FreeBSD9-orig.tar] or  
-you can use /opt/FreeBSD9-orig.tar from our server.
-
-Please make some document so that I can follow to build/compile and run the code.
-It would be better if the document includes some introduction and some important implementation details or your program structure.
-
-htop is a program that shows threads execution in the system.
-
-Measure & compare of execution time for different # of threads
-
-Happy hacking!
-Seehwan
+```text
+// 시나리오 1
+./01_single_line large_random_file.bin 10 10 
+// 시나리오 2
+./02_single_chunk large_random_file.bin 10 10 
+// 시나리오 3
+./03_multiple_chunk large_random_file.bin 10 10 20
+// 시나리오 4
+./04_detailed_profile large_random_file.bin 10 10 20
+// 시나리오 5
+./05_sharded large_random_file.bin 10 10 10 10
+// 시나리오 6
+./06_mmap large_random_file.bin 10 10 100
+// 시나리오 7
+./07_mmap_sharded large_random_file.bin 10 10 10 10
+```
