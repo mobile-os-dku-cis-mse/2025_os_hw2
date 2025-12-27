@@ -22,7 +22,7 @@ void mmap_reader_init(MmapReader *reader, FILE *file, ReadRange range, size_t ch
         return;
     }
 
-    madvise(addr, length, POSIX_MADV_SEQUENTIAL);
+    posix_madvise(addr, length, POSIX_MADV_SEQUENTIAL);
 
     reader->map_addr = addr;
     reader->map_len = length;

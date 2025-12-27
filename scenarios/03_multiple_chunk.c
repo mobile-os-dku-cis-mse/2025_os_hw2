@@ -101,10 +101,12 @@ int main(int argc, char *argv[]) {
     }
 
     if (argv[2] != NULL) Nprod = atoi(argv[2]); else Nprod = 1;
-    if (Nprod > 100) Nprod = 100; if (Nprod == 0) Nprod = 1;
+    if (Nprod > 100) Nprod = 100;
+    if (Nprod == 0) Nprod = 1;
 
     if (argv[3] != NULL) Ncons = atoi(argv[3]); else Ncons = 1;
-    if (Ncons > 100) Ncons = 100; if (Ncons == 0) Ncons = 1;
+    if (Ncons > 100) Ncons = 100;
+    if (Ncons == 0) Ncons = 1;
 
     if (argc > 4 && argv[4] != NULL) BufferSize = atoi(argv[4]); else BufferSize = 10;
     if (BufferSize <= 0) BufferSize = 10;

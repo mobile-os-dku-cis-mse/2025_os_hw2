@@ -15,28 +15,10 @@
 #include "../components/2_buffer/multiple_chunk_buffer.h"
 #include "../components/3_processor/char_stat.h"
 #include "../components/4_statistics/timer.h"
+#include "../components/4_statistics/thread_metrics.h"
 #include "../components/common.h"
 
-
 #define CHUNK_SIZE 4096
-
-
-typedef struct {
-    double io_time_sec;
-
-    double wait_time_sec;
-
-    double cpu_proc_time_sec;
-
-    long chunks_processed;
-
-    long min_page_faults;
-
-    long maj_page_faults;
-
-    long voluntary_switches;
-} ThreadMetrics;
-
 
 typedef struct {
     int id;
@@ -50,7 +32,6 @@ typedef struct {
     ThreadMetrics metrics;
 } ConsumerThread;
 
-
 typedef struct {
     int id;
 
@@ -62,34 +43,6 @@ typedef struct {
 
     ThreadMetrics metrics;
 } ProducerThread;
-
-
-void tm_start(struct timespec *ts) {
-    clock_gettime(CLOCK_MONOTONIC, ts);
-}
-
-
-double tm_stop(struct timespec *ts) {
-    struct timespec end;
-
-    clock_gettime(CLOCK_MONOTONIC, &end);
-
-    return (end.tv_sec - ts->tv_sec) + (end.tv_nsec - ts->tv_nsec) / 1e9;
-}
-
-
-void tm_update_rusage(ThreadMetrics *tm) {
-    struct rusage usage;
-
-    if (getrusage(RUSAGE_THREAD, &usage) == 0) {
-        tm->min_page_faults = usage.ru_minflt;
-
-        tm->maj_page_faults = usage.ru_majflt;
-
-        tm->voluntary_switches = usage.ru_nvcsw;
-    }
-}
-
 
 void *producer(void *arg) {
     ProducerThread *pt = (ProducerThread *) arg;
@@ -267,20 +220,6 @@ void print_detailed_analysis(ProducerThread *prods, int n_prod, ConsumerThread *
            total_prod_wait / n_prod, total_cons_wait / n_cons);
 
     printf("3. Avg Compute Time : %.4f sec (Consumer Processing)\n", total_proc / n_cons);
-
-
-    if (total_maj_fault > 100) {
-        printf(">> [Insight] DISK BOUND: High Major Page Faults. The bottleneck is the Hard Disk.\n");
-    } else {
-        printf(">> [Insight] MEMORY/LOCK BOUND: Data is in Page Cache. Bottleneck is likely Lock Contention.\n");
-    }
-
-
-    if (total_prod_wait / n_prod > total_cons_wait / n_cons) {
-        printf(">> [Insight] BUFFER FULL: Producers are blocked. Consumers are too slow.\n");
-    } else {
-        printf(">> [Insight] BUFFER EMPTY: Consumers are blocked. Producers (I/O) are too slow.\n");
-    }
 
     printf("===================================================================\n");
 }
